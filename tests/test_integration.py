@@ -85,9 +85,16 @@ async def test_location_event(hass: HomeAssistant, matter_client: MagicMock, fp4
         {"id": 0, "x": -5, "y": 228, "row": 4, "col": 8, "activity": "still", "zones": [1]}
     ]
 
-    # matter.js style payload with labels
+    # matter.js style payload with labels; a frame within 0.5 s of the last write is published
+    # at the end of that interval (position writes are throttled to 2/s)
+    from datetime import timedelta
+
+    from homeassistant.util import dt as dt_util
+    from tests.common import async_fire_time_changed
+
     event.data = {"targets": [{"targetId": 1, "x": 10, "y": 100, "cell": 0x0207, "activityState": 1}]}
     await trigger_subscription_callback(hass, matter_client, EventType.NODE_EVENT, event, node_id=fp400.node_id)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=1))
     await hass.async_block_till_done()
     state = hass.states.get("sensor.aqara_spatial_multi_sensor_fp400_radar_tracked_people")
     assert state.attributes["targets"][0]["col"] == 7
@@ -623,3 +630,45 @@ async def test_diagnostics(hass: HomeAssistant, matter_client: MagicMock, enable
     sensor = result["fp400"][0]
     assert sensor["fabric_vendor_id"] == "0xFFF1"
     assert "0/40/15" not in str(result)
+
+
+async def test_position_writes_are_throttled(hass: HomeAssistant, matter_client: MagicMock, fp400) -> None:
+    """A burst of frames writes the position entity at most twice a second, ending on the latest frame."""
+    from datetime import timedelta
+
+    from homeassistant.core import Event, callback
+    from homeassistant.helpers.event import async_track_state_change_event
+    from homeassistant.util import dt as dt_util
+    from tests.common import async_fire_time_changed
+
+    entity_id = "sensor.aqara_spatial_multi_sensor_fp400_radar_tracked_people"
+    writes: list[int] = []
+
+    @callback
+    def _record(event: Event) -> None:
+        writes.append(event.data["new_state"].attributes["targets"][0]["x"])
+
+    async_track_state_change_event(hass, entity_id, _record)
+
+    def frame(number: int, x: int) -> MatterNodeEvent:
+        return MatterNodeEvent(
+            node_id=fp400.node_id,
+            endpoint_id=1,
+            cluster_id=CLUSTER_LOCATION,
+            event_id=0,
+            event_number=number,
+            priority=1,
+            timestamp=0,
+            timestamp_type=0,
+            data={"targets": [{"targetId": 1, "x": x, "y": 100, "cell": 0, "activityState": 1}]},
+        )
+
+    for number, x in enumerate(range(10, 60, 10), start=100):
+        await trigger_subscription_callback(
+            hass, matter_client, EventType.NODE_EVENT, frame(number, x), node_id=fp400.node_id
+        )
+    await hass.async_block_till_done()
+    assert writes == [10]  # first frame at once, the rest wait for the interval
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=1))
+    await hass.async_block_till_done()
+    assert writes == [10, 50]  # one write, carrying the latest frame

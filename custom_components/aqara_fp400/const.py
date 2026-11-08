@@ -124,6 +124,10 @@ LOCATION_RENEW_S = 3300
 # Once the room reports empty, drop positions the stream has not refreshed for this long.
 # A LocationInfo frame can land just after the occupancy clear, and nothing else removes it.
 TARGETS_EXPIRE_S = 30
+# The position stream sends ~7 frames/s while someone moves. Write the position entities at
+# most this often (2/s), always finishing on the latest frame: keeps the card live while
+# cutting the state writes (and the Recorder rows) by about three quarters.
+TARGETS_MIN_INTERVAL_S = 0.5
 ZONE_POLL_S = 120  # re-read zones; the device does not push attr 16 changes (e.g. zones set in the Aqara app)
 
 ACTIVITY_STATES = {0: "unknown", 1: "active", 2: "still"}
