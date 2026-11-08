@@ -172,6 +172,73 @@ The integration logs little at the default level. To see what it does:
 Warnings are logged without debug when no FP400 is found on the Matter server (with the vendor and product IDs of the
 nodes it does see), and the first time reading the zones from the device fails.
 
+### The FP400 is not on the Matter server
+
+If the warning says *No Aqara FP400 found* and lists only other nodes (for example an Aqara Hub M3), the FP400 was
+never commissioned into Home Assistant. A hub does not make it visible: the Hub M3 bridges its Zigbee devices to Home
+Assistant, but an FP400 added in Matter mode under the hub stays on Aqara's fabric only. Home Assistant needs the FP400
+as its own Matter node.
+
+If the FP400 is already in the Aqara Home app, share it from there (multi-admin):
+
+1. In Aqara Home, open the **FP400** page (not the hub's) and use its Matter sharing option ("Add to other platforms" /
+   "Share pairing code"; the label varies by app version). The app opens a pairing window and shows a temporary code.
+2. In Home Assistant, within those few minutes: Settings → Devices & services → Add device → Matter → "No QR code" →
+   enter that temporary code.
+
+The code printed on the sensor only works on a factory-new or reset device. On a device that already belongs to a
+fabric, use the temporary code from the app. The FP400 stays in Aqara Home at the same time.
+
+### Commissioning fails: the Thread network is unreachable (IPv6)
+
+**Symptoms.** Adding the FP400 runs for about three minutes, then fails with:
+
+```
+Commission failed: discovery of node with discriminator 3 failed: No device could be commissioned
+(1 of 1 started attempt(s) failed, 1 discovered)
+```
+
+The Matter Server add-on's log (Settings → Add-ons → Matter Server → Log) shows that it found the FP400 at a Thread
+address and could not reach it, a few milliseconds after starting:
+
+```
+Operational address for undefined set to udp://[fdbe:cc00:44fd:1:a4a0:da5b:b4a5:c23]:5540
+WARN Address udp://[fdbe:cc00:44fd:1:a4a0:da5b:b4a5:c23]:5540 unreachable
+```
+
+**Cause.** The FP400 is a Matter-over-Thread device. Its address belongs to the Thread network, behind a Thread border
+router (for example the Aqara Hub M3). The Home Assistant host reaches it through an IPv6 route that the border router
+announces on the local network (router advertisements). Without that route, the operating system refuses to send the
+packets, so the code, the vendor ID and the integration are not involved. This is common when Home Assistant runs in a
+virtual machine.
+
+**Checks**, in order:
+
+1. Settings → System → Network → your interface → **IPv6: Automatic** (not disabled or static).
+2. If Home Assistant runs in a virtual machine, its network must be **bridged** to the local network, not NAT or
+   "shared". Behind NAT it never receives the border router's announcements.
+3. From the *Terminal & SSH* add-on, check the route and reach the sensor (use the prefix and address from the log):
+
+   ```
+   ip -6 route | grep fdbe
+   ping -6 -c 3 fdbe:cc00:44fd:1:a4a0:da5b:b4a5:c23
+   ```
+
+   Expect a line such as `fdbe:cc00:44fd:1::/64 via fe80::… dev enp0s5 proto ra` and replies to the ping. If the route
+   is missing, see points 1 and 2; some routers and Wi-Fi access points also filter IPv6 multicast, which carries these
+   announcements.
+4. Routes learnt this way expire if the border router does not refresh them in time. If the route comes and goes,
+   check it several times with `ip -6 route show <prefix>`, and retry commissioning while it is present.
+
+Then generate a **new** temporary code (they expire after a few minutes) and add the device again. Once the route is
+there, commissioning takes a few seconds.
+
+Other messages in the same log:
+
+- `This device is already commissioned into this fabric`: the code belongs to a device Home Assistant already has
+  (often the hub itself), not to the FP400.
+- `DCL revocation lookup failed`: harmless, unrelated to commissioning.
+
 ## Development
 
 Tests run inside a Home Assistant core checkout so they can reuse the Matter test fixtures:
