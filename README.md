@@ -1,5 +1,9 @@
 # Aqara FP400 (Matter) for Home Assistant
 
+> This is the [azman0101](https://github.com/azman0101)-maintained fork of
+> [RAR/ha-aqara-fp400](https://github.com/RAR/ha-aqara-fp400) by Andrew Rankin. Report issues with this fork
+> [here](https://github.com/azman0101/ha-aqara-fp400/issues). See [NOTICE.md](NOTICE.md).
+
 Zones, live people positions and setup commands for the Aqara Spatial Multi-Sensor FP400 in Matter/Thread mode —
 the parts the Aqara app does (when it works) that plain Matter does not expose.
 
@@ -15,11 +19,15 @@ Running the FP400 on Zigbee instead? This integration does not apply; see
 
 ## Installation
 
-1. Add `https://github.com/RAR/ha-aqara-fp400` as a custom repository in HACS (category: Integration) and install it,
+1. Add `https://github.com/azman0101/ha-aqara-fp400` as a custom repository in HACS (category: Integration) and install it,
    or copy `custom_components/aqara_fp400` into your `config/custom_components`.
 2. Restart Home Assistant and add the **Aqara FP400 (Matter)** integration from Settings → Devices & services. It finds
    every FP400 on the Matter integration by itself.
 3. Add the zone card to a dashboard (see below). The integration registers the card resource itself.
+
+Already using [RAR/ha-aqara-fp400](https://github.com/RAR/ha-aqara-fp400) through HACS? Both repositories install the
+same `aqara_fp400` domain into the same folder. Read [docs/INSTALL.md](docs/INSTALL.md) before switching, so you keep
+your entities, zone names and history.
 
 ## Requirements
 
@@ -156,4 +164,4 @@ FP400 entities to the Matter integration.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [LICENSE](LICENSE). Attribution and fork maintenance: [NOTICE.md](NOTICE.md).
