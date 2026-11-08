@@ -3,6 +3,16 @@
 Releases of the azman0101 fork. Earlier versions are
 [RAR/ha-aqara-fp400](https://github.com/RAR/ha-aqara-fp400) releases.
 
+## 1.3.5
+
+- The zone card now draws corner-mounted sensors in their corner. It looked for
+  `select.<name>_radar_side_install`, but Home Assistant names that entity
+  `select.<name>_radar_side_install_position` (from "Side install position"), so the
+  sensor was always drawn as wall-mounted unless `mount:` was set in the card. The old
+  name is still tried as a fallback. README entity names corrected.
+- After updating, reload the dashboard: the new version number makes browsers fetch
+  the new card.
+
 ## 1.3.4
 
 - The integration has its own icon, shipped in `custom_components/aqara_fp400/brand/`
