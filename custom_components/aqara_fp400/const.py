@@ -18,6 +18,14 @@ CLUSTER_LOCATION = 0x115FFC0C  # OccupantLocation
 CLUSTER_OCCUPANCY_SENSING = 0x0406  # attr 0 = Occupancy bitmap
 CLUSTER_BASIC_INFORMATION = 0x28  # startUp event 0 signals a reboot
 CLUSTER_GENERAL_DIAGNOSTICS = 0x33  # bootReason event 0
+CLUSTER_OPERATIONAL_CREDENTIALS = 0x3E  # attr 1 = Fabrics, attr 5 = CurrentFabricIndex
+ATTR_FABRICS = 1
+ATTR_CURRENT_FABRIC_INDEX = 5
+# Vendor ID the Home Assistant Matter Server add-on commissions with. The FP400 answers every
+# read, write and command on its vendor clusters with UnsupportedAttribute from such a fabric.
+NABU_CASA_VENDOR_ID = 0x134B
+VENDOR_CLUSTERS = (0x115FFC0A, 0x115FFC0B, 0x115FFC0C)
+ISSUE_UNTRUSTED_FABRIC = "untrusted_fabric_vendor"
 
 ATTR_INSTALL_MODE = 0
 ATTR_SIDE_INSTALL = 2

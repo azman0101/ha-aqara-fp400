@@ -258,5 +258,11 @@
         }
       }
     }
+  },
+  "issues": {
+    "untrusted_fabric_vendor": {
+      "title": "{name}: Matter fabric vendor ID not accepted",
+      "description": "{name} is controlled through a Matter fabric with vendor ID {vendor_id}, the default of the Home Assistant Matter Server add-on. The FP400 refuses its zones, regions, settings and position stream from such a fabric; only occupancy and basic values work.\n\nSet another vendor ID on the Matter server (for example `--vendorid 65521` in the add-on's `matter_server_args`), restart it, then commission **every** Matter device on that server again: restarting the server alone does not move devices that are already commissioned."
+    }
   }
 }

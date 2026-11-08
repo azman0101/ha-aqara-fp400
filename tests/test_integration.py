@@ -569,3 +569,57 @@ async def test_node_removed(hass: HomeAssistant, matter_client: MagicMock, fp400
 
     assert dr.async_get(hass).async_get(device_id) is None
     assert er.async_get(hass).async_get(zones) is None
+
+
+async def _setup_with_fabric(hass: HomeAssistant, matter_client: MagicMock, vendor_id: int):
+    """Like the fp400 fixture, with the node controlled through a fabric of the given vendor ID."""
+    node = await setup_integration_with_node_fixture(
+        hass,
+        "aqara_presence_fp400",
+        matter_client,
+        {"0/62/1": [{"1": "", "2": vendor_id, "3": 1, "4": 1, "5": "", "254": 1}], "0/62/5": 1},
+    )
+    matter_client.send_command.return_value = {"status": 0}
+    matter_client.read_attribute.return_value = {}
+    entry = MockConfigEntry(domain="aqara_fp400", data={})
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    return node, entry
+
+
+@pytest.mark.parametrize(("vendor_id", "issue"), [(0x134B, True), (0xFFF1, False)])
+async def test_untrusted_fabric_vendor_raises_repair_issue(
+    hass: HomeAssistant, matter_client: MagicMock, enable_custom_integrations: None, vendor_id: int, issue: bool
+) -> None:
+    """A fabric with the add-on's default vendor ID is reported in Repairs, not only in debug logs."""
+    from homeassistant.helpers import issue_registry as ir
+
+    node, _ = await _setup_with_fabric(hass, matter_client, vendor_id)
+    found = ir.async_get(hass).async_get_issue("aqara_fp400", f"untrusted_fabric_vendor_{node.node_id}")
+    assert (found is not None) is issue
+
+
+async def test_zone_read_failure_warns_once(
+    hass: HomeAssistant, matter_client: MagicMock, enable_custom_integrations: None, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Refused vendor reads are a single warning that names the fabric vendor ID."""
+    node, entry = await _setup_with_fabric(hass, matter_client, 0x134B)
+    fp = entry.runtime_data.nodes[node.node_id]
+    await fp.async_read_zones()
+    await fp.async_read_zones()
+    warnings = [r for r in caplog.records if "reading zones from the device failed" in r.message]
+    assert len(warnings) == 1
+    assert "0x134B" in warnings[0].message
+
+
+async def test_diagnostics(hass: HomeAssistant, matter_client: MagicMock, enable_custom_integrations: None) -> None:
+    """Diagnostics list the Matter nodes and the FP400 state, without serial numbers."""
+    from custom_components.aqara_fp400.diagnostics import async_get_config_entry_diagnostics
+
+    node, entry = await _setup_with_fabric(hass, matter_client, 0xFFF1)
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    assert any(n["node_id"] == node.node_id and n["is_fp400"] for n in result["matter_nodes"])
+    sensor = result["fp400"][0]
+    assert sensor["fabric_vendor_id"] == "0xFFF1"
+    assert "0/40/15" not in str(result)

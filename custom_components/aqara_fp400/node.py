@@ -23,6 +23,8 @@ from matter_server.common.models import APICommand, EventType, MatterNodeEvent
 from .const import (
     ACTIVITY_STATES,
     ATTR_ACTIVITY_STATE,
+    ATTR_CURRENT_FABRIC_INDEX,
+    ATTR_FABRICS,
     ATTR_HUMAN_COUNT,
     ATTR_LEARNING_DURATION,
     ATTR_LEARNING_REPORT_TIMEOUT,
@@ -34,6 +36,7 @@ from .const import (
     CLUSTER_GENERAL_DIAGNOSTICS,
     CLUSTER_LOCATION,
     CLUSTER_OCCUPANCY_SENSING,
+    CLUSTER_OPERATIONAL_CREDENTIALS,
     CLUSTER_RADAR,
     DOMAIN,
     EVENT_LOCATION_INFO,
@@ -49,6 +52,7 @@ from .const import (
     MAX_ZONES,
     MOTION_EVENTS,
     MOTION_UNRECOGNIZED,
+    NABU_CASA_VENDOR_ID,
     REGIONS,
     SENSOR_ENDPOINT,
     TARGETS_EXPIRE_S,
@@ -219,6 +223,7 @@ class FP400Node:
     _was_available: bool = True
     _renew_failing: bool = False
     _unrecognized_motion_codes: set[int] = field(default_factory=set)
+    zones_read_failing: bool = False
 
     @property
     def node_id(self) -> int:
@@ -254,6 +259,22 @@ class FP400Node:
             model=attrs.get("0/40/3"),
             via_device_id=matter_device.id if matter_device else None,
         )
+
+    @property
+    def fabric_vendor_id(self) -> int | None:
+        """Vendor ID of the fabric Home Assistant controls this node through, if the node reports it."""
+        attrs = self.node.node_data.attributes
+        fabrics = attrs.get(f"0/{CLUSTER_OPERATIONAL_CREDENTIALS}/{ATTR_FABRICS}")
+        if not isinstance(fabrics, list):
+            return None
+        entries = [entry for entry in fabrics if isinstance(entry, dict)]
+        current = attrs.get(f"0/{CLUSTER_OPERATIONAL_CREDENTIALS}/{ATTR_CURRENT_FABRIC_INDEX}")
+        if current is not None:
+            entries = [entry for entry in entries if _get(entry, "fabricIndex", 254) == current] or entries
+        if len(entries) != 1:
+            return None
+        vendor = _get(entries[0], "vendorID", "vendorId", 2)
+        return vendor if isinstance(vendor, int) and not isinstance(vendor, bool) else None
 
     @property
     def max_zones(self) -> int:
@@ -444,14 +465,36 @@ class FP400Node:
         try:
             result = await self.matter_client.read_attribute(self.node_id, path)
         except Exception as err:
-            LOGGER.debug("%s: reading zones failed: %s", self.name, err)
+            self._zones_read_failed(str(err) or type(err).__name__)
             return None
         if not isinstance(result, dict) or path not in result:
+            self._zones_read_failed("the device returned no zone list")
             return None
+        if self.zones_read_failing:
+            LOGGER.info("%s: reading zones from the device works again", self.name)
+            self.zones_read_failing = False
         self.node.node_data.attributes[path] = result[path]
         return sorted(
             (z for z in (parse_zone(item) for item in result[path] or []) if z is not None), key=lambda z: z.zone_id
         )
+
+    def _zones_read_failed(self, reason: str) -> None:
+        """Warn once: zones, regions and the position stream all depend on these vendor reads."""
+        if self.zones_read_failing:
+            LOGGER.debug("%s: reading zones failed: %s", self.name, reason)
+            return
+        self.zones_read_failing = True
+        vendor = self.fabric_vendor_id
+        if vendor == NABU_CASA_VENDOR_ID:
+            hint = (
+                " The fabric's vendor ID is 0x134B, the Matter Server add-on's default, from which the FP400"
+                " refuses its vendor clusters: see the README's Requirements."
+            )
+        elif vendor is not None:
+            hint = f" Fabric vendor ID 0x{vendor:04X}. Check that the Matter server is recent enough (README)."
+        else:
+            hint = ""
+        LOGGER.warning("%s: reading zones from the device failed (%s).%s", self.name, reason, hint)
 
     async def _async_initial_zones(self) -> None:
         if (zones := await self.async_read_zones()) is not None:

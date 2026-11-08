@@ -51,7 +51,10 @@ your entities, zone names and history.
   ```
 
   A different vendor ID is a different fabric, so every Matter device on that server has to be commissioned again, not
-  just the FP400. No Aqara Home setup is needed. Other vendor IDs (0x115F, Amazon, Apple) are untested.
+  just the FP400. Restarting the server with the new vendor ID is not enough: devices commissioned before keep the old
+  fabric until they are commissioned again. No Aqara Home setup is needed. Other vendor IDs (0x115F, Amazon, Apple) are
+  untested. While the FP400 is still on a 0x134B fabric, the integration shows a warning under Settings → System →
+  Repairs.
 
 ## What you get
 
@@ -148,6 +151,26 @@ under the chips names, enables/disables or deletes the selected zone. **Learn** 
 (it proposes zones itself after watching the room for about half a minute); the card counts down and reloads the zones. Regions are drawn as outlines and painted as a fill while
 you edit them. **Save** writes the change to the device. Tracked people are drawn as dots (hollow when still); cells
 outside the monitoring range are shaded. Turn on the live tracking switch to see people move.
+
+## Troubleshooting
+
+The integration logs little at the default level. To see what it does:
+
+- **Repairs:** Settings → System → Repairs shows a warning when the FP400 is controlled through a fabric whose vendor ID
+  it refuses (0x134B, the add-on's default).
+- **Diagnostics:** Settings → Devices & services → Aqara FP400 (Matter) → ⋮ → Download diagnostics. It lists the nodes
+  on the Matter server with their vendor and product IDs, whether each is recognised as an FP400, the fabric vendor ID,
+  and the vendor-cluster attributes the server holds. No serial numbers or zone names.
+- **Debug logs:** same menu → Enable debug logging, or in `configuration.yaml`:
+
+  ```yaml
+  logger:
+    logs:
+      custom_components.aqara_fp400: debug
+  ```
+
+Warnings are logged without debug when no FP400 is found on the Matter server (with the vendor and product IDs of the
+nodes it does see), and the first time reading the zones from the device fails.
 
 ## Development
 
