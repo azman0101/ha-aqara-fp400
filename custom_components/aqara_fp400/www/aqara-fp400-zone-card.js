@@ -234,8 +234,11 @@ class AqaraFp400ZoneCard extends HTMLElement {
   // wall | left_corner | right_corner: the card's config, else the device's side-install setting
   _mount() {
     if (this._config.mount) return this._config.mount;
-    const select = this._config.entity.replace(/^sensor\./, "select.").replace(/_zones$/, "_side_install");
-    const state = this._hass?.states?.[select]?.state;
+    // Home Assistant names the select after its translated name ("Side install position");
+    // "_side_install" is kept for setups whose entity ID was renamed to that.
+    const base = this._config.entity.replace(/^sensor\./, "select.").replace(/_zones$/, "");
+    const states = this._hass?.states || {};
+    const state = (states[base + "_side_install_position"] || states[base + "_side_install"])?.state;
     return state === "left_corner" || state === "right_corner" ? state : "wall";
   }
 

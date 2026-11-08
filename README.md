@@ -72,7 +72,7 @@ your entities, zone names and history.
 | `sensor.<name>_radar_zone_N_last_motion` | the same per zone — one sensor per configured zone, created and removed with the zones |
 | `sensor.<name>_radar_activity_state` / `_human_count` | activity (unknown/active/still) and the device's own people count — its estimate from the radar, reported whether or not live tracking is on; *tracked people* above is the number of targets in the position stream, so the two can differ |
 | `sensor.<name>_radar_install_status` / `_install_angle` | orientation from the tilt sensor (diagnostic) |
-| `select.<name>_radar_install_mode` / `_side_install` / `_coordinate_reverse` / `_detection_direction` / `_proximity_distance_level` | install and detection settings |
+| `select.<name>_radar_install_mode` / `_side_install_position` / `_coordinate_reverse` / `_detection_direction` / `_proximity_distance_level` | install and detection settings |
 | `number.<name>_radar_install_height` | mounting height in mm (limits from the device) |
 | `switch.<name>_radar_live_tracking` | keeps the position stream alive (~7 updates/s while someone moves) |
 | `button.<name>_radar_start_background_learning` | starts the AI space background learning |
@@ -143,7 +143,8 @@ mount: wall                # optional; wall, left_corner or right_corner — def
 
 Corner mounts use the same cell grid; the card draws the sensor in that corner (verified on a left-corner unit, where
 the cell next to the sensor is row 0, column 0; right-corner mirrors it, untested). Set the mounting in the Aqara app
-or with `select.<name>_radar_side_install`.
+or with `select.<name>_radar_side_install_position`. The card reads that select to place the sensor; set `mount:`
+(`wall`, `left_corner` or `right_corner`) in the card's configuration to override it.
 
 Pick a layer at the top (Zones, or one of the three regions), select a zone chip or **Add zone**, then click or drag on
 the grid to paint (painting over another zone's cell moves the cell; **Erase** removes cells from any zone). The panel
