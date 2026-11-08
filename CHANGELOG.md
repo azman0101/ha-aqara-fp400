@@ -3,6 +3,14 @@
 Releases of the azman0101 fork. Earlier versions are
 [RAR/ha-aqara-fp400](https://github.com/RAR/ha-aqara-fp400) releases.
 
+## 1.3.4
+
+- The integration has its own icon, shipped in `custom_components/aqara_fp400/brand/`
+  (`icon.png` 256×256 and `icon@2x.png` 512×512). Home Assistant 2026.10 and later
+  serve brand images from a custom integration's `brand` folder, so the icon shows
+  on the integration and device pages without a change to the `home-assistant/brands`
+  repository. Logos and dark variants fall back to the same icon.
+
 ## 1.3.3
 
 The integration was nearly silent when something was wrong. It now says why:
