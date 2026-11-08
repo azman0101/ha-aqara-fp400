@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse, cal
 from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.loader import async_get_integration
 from matter_server.client.models.node import MatterNode
@@ -29,7 +30,9 @@ from .const import (
     DOMAIN,
     GRID_COLS,
     GRID_ROWS,
+    ISSUE_UNTRUSTED_FABRIC,
     LOGGER,
+    NABU_CASA_VENDOR_ID,
     PRODUCT_ID_FP400,
     REGIONS,
     SERVICE_CLEAR_REGION,
@@ -96,11 +99,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: FP400ConfigEntry) -> boo
         _attach_zone_names(hass, entry, fp)
         await fp.async_start()
         data.nodes[node.node_id] = fp
-        LOGGER.info("Found %s (node %s)", fp.name, node.node_id)
+        vendor = fp.fabric_vendor_id
+        LOGGER.info(
+            "Found %s (node %s, fabric vendor ID %s)",
+            fp.name,
+            node.node_id,
+            "unknown" if vendor is None else f"0x{vendor:04X}",
+        )
+        _check_fabric_vendor(hass, fp)
         async_dispatcher_send(hass, SIGNAL_NEW_NODE, fp)
 
-    for node in client.get_nodes():
+    nodes = client.get_nodes()
+    for node in nodes:
         await _add_node(node)
+    if not data.nodes:
+        # Otherwise the integration loads silently with no device, and nothing says why.
+        LOGGER.warning(
+            "No Aqara FP400 (vendor 0x%04X, product 0x%04X) found on the Matter server; nodes: %s",
+            VENDOR_ID,
+            PRODUCT_ID_FP400,
+            ", ".join(_describe(node) for node in nodes) or "none",
+        )
 
     @callback
     def _on_node_added(event: EventType, node: MatterNode) -> None:
@@ -128,6 +147,41 @@ async def async_setup_entry(hass: HomeAssistant, entry: FP400ConfigEntry) -> boo
     return True
 
 
+def _describe(node: MatterNode) -> str:
+    """Short node summary for logs: id, vendor and product."""
+    attrs = node.node_data.attributes
+    vendor, product = attrs.get("0/40/2"), attrs.get("0/40/4")
+    vendor_text = f"0x{vendor:04X}" if isinstance(vendor, int) else "?"
+    product_text = f"0x{product:04X}" if isinstance(product, int) else "?"
+    return f"{node.node_id} ({attrs.get('0/40/3') or 'unnamed'}, vendor {vendor_text}, product {product_text})"
+
+
+@callback
+def _check_fabric_vendor(hass: HomeAssistant, fp: FP400Node) -> None:
+    """Raise a repair issue, visible without logs, when the fabric's vendor ID is one the FP400 refuses."""
+    issue_id = f"{ISSUE_UNTRUSTED_FABRIC}_{fp.node_id}"
+    if fp.fabric_vendor_id != NABU_CASA_VENDOR_ID:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
+        return
+    LOGGER.warning(
+        "%s is controlled through a fabric with vendor ID 0x%04X: the FP400 refuses zones, regions, settings"
+        " and the position stream from it. Set another vendor ID on the Matter server and commission the"
+        " devices again (see the README's Requirements)",
+        fp.name,
+        NABU_CASA_VENDOR_ID,
+    )
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key=ISSUE_UNTRUSTED_FABRIC,
+        translation_placeholders={"name": fp.name, "vendor_id": f"0x{NABU_CASA_VENDOR_ID:04X}"},
+        learn_more_url="https://github.com/azman0101/ha-aqara-fp400#requirements",
+    )
+
+
 def _serial(node: MatterNode) -> str:
     """Key for per-device settings that survives re-commissioning (the node id does not)."""
     return str(node.node_data.attributes.get("0/40/15") or node.node_id)
@@ -147,6 +201,16 @@ def _attach_zone_names(hass: HomeAssistant, entry: FP400ConfigEntry, fp: FP400No
         hass.config_entries.async_update_entry(entry, data={**entry.data, CONF_ZONE_NAMES: all_names})
 
     fp.save_zone_names = save
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: FP400ConfigEntry) -> None:
+    """Drop this integration's repair issues with the entry."""
+    for issue_id in [
+        issue_id
+        for (domain, issue_id) in ir.async_get(hass).issues
+        if domain == DOMAIN and issue_id.startswith(ISSUE_UNTRUSTED_FABRIC)
+    ]:
+        ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: FP400ConfigEntry) -> bool:
