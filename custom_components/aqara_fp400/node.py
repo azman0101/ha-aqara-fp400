@@ -48,6 +48,7 @@ from .const import (
     LOGGER,
     MAX_ZONES,
     MOTION_EVENTS,
+    MOTION_UNRECOGNIZED,
     REGIONS,
     SENSOR_ENDPOINT,
     TARGETS_EXPIRE_S,
@@ -217,6 +218,7 @@ class FP400Node:
     _renew_now: asyncio.Event = field(default_factory=asyncio.Event)
     _was_available: bool = True
     _renew_failing: bool = False
+    _unrecognized_motion_codes: set[int] = field(default_factory=set)
 
     @property
     def node_id(self) -> int:
@@ -678,7 +680,15 @@ class FP400Node:
             if not isinstance(code, int | str) or (isinstance(code, str) and not code.isdigit()):
                 LOGGER.debug("%s: unexpected MotionDetected payload %r", self.name, data.data)
                 return
-            self.last_motion = MOTION_EVENTS.get(int(code), str(code))
+            motion_code = int(code)
+            if motion_code in MOTION_EVENTS:
+                self.last_motion = MOTION_EVENTS[motion_code]
+            else:
+                # The motion sensors are enums: a value outside their options cannot be written.
+                if motion_code not in self._unrecognized_motion_codes:
+                    self._unrecognized_motion_codes.add(motion_code)
+                    LOGGER.warning("%s: unrecognized MotionDetected code %s", self.name, motion_code)
+                self.last_motion = MOTION_UNRECOGNIZED
             zone_ids = {ep: zid for zid, ep in self.zone_endpoints().items()}
             self.last_motion_zone = zone_ids.get(data.endpoint_id)
             self.last_motion_at = dt_util.utcnow()
