@@ -1,0 +1,170 @@
+# Example dashboard for the Aqara FP400 (Matter) integration.
+#
+# Settings → Dashboards → Add dashboard → New dashboard from scratch, open it,
+# ⋮ → Edit dashboard → ⋮ → Raw configuration editor, and paste this file.
+#
+# Entity IDs assume the default device name "Aqara Spatial Multi-Sensor FP400".
+# If you named the device differently, replace
+# "aqara_spatial_multi_sensor_fp400" with your prefix everywhere (one search and
+# replace). The occupancy and illuminance entities come from the Matter
+# integration itself; adjust them if your IDs differ.
+#
+# Cards whose entity may not exist (the zone card before the radar device is
+# created, the Matter occupancy and illuminance entities) are hidden by a
+# `visibility` condition instead of showing an error. If one of them never
+# appears, its entity ID is wrong: check it under Settings → Entities.
+title: Aqara FP400
+views:
+  - title: Radar
+    path: radar
+    icon: mdi:radar
+    type: sections
+    max_columns: 3
+    sections:
+      - type: grid
+        cards:
+          - type: heading
+            heading: Zones and people
+          # The card reads the Zones sensor and derives the regions, tracked
+          # people and side-install entities from its ID.
+          - type: custom:aqara-fp400-zone-card
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_zones
+            grid_options:
+              columns: full
+            # Shown only once the Zones sensor exists (a missing entity counts
+            # as unavailable). Having no zones yet is fine: the card says so.
+            visibility:
+              - condition: state
+                entity: sensor.aqara_spatial_multi_sensor_fp400_radar_zones
+                state_not: unavailable
+          - type: tile
+            entity: switch.aqara_spatial_multi_sensor_fp400_radar_live_tracking
+            name: Live tracking
+            features:
+              - type: toggle
+          - type: tile
+            entity: button.aqara_spatial_multi_sensor_fp400_radar_start_background_learning
+            name: Learn zones
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Presence
+          - type: tile
+            entity: binary_sensor.aqara_spatial_multi_sensor_fp400_occupancy
+            name: Occupancy
+            visibility:
+              - condition: state
+                entity: binary_sensor.aqara_spatial_multi_sensor_fp400_occupancy
+                state_not: unavailable
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_human_count
+            name: People (radar estimate)
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_tracked_people
+            name: People tracked
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_activity_state
+            name: Activity
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_last_motion
+            name: Last motion
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_illuminance
+            name: Illuminance
+            visibility:
+              - condition: state
+                entity: sensor.aqara_spatial_multi_sensor_fp400_illuminance
+                state_not: unavailable
+          - type: history-graph
+            title: Last 24 hours
+            hours_to_show: 24
+            grid_options:
+              columns: full
+            entities:
+              - entity: sensor.aqara_spatial_multi_sensor_fp400_radar_human_count
+                name: People (radar estimate)
+              - entity: sensor.aqara_spatial_multi_sensor_fp400_radar_activity_state
+                name: Activity
+              - entity: sensor.aqara_spatial_multi_sensor_fp400_radar_last_motion
+                name: Last motion
+          # One "Zone N last motion" sensor exists per configured zone; this
+          # lists them without having to edit the dashboard when zones change.
+          - type: markdown
+            title: Motion per zone
+            grid_options:
+              columns: full
+            content: >-
+              {% set zones = states.sensor
+                | selectattr('entity_id', 'match',
+                  'sensor\.aqara_spatial_multi_sensor_fp400_radar_zone_\d+_last_motion$')
+                | list %}
+              {% if zones %}
+              | Zone | Last motion | When |
+              |---|---|---|
+              {% for s in zones | sort(attribute='attributes.zone') -%}
+              | {{ s.attributes.zone_name or ('Zone ' ~ s.attributes.zone) }} | {{ state_translated(s.entity_id) }} | {{ relative_time(s.attributes.at) ~ ' ago' if s.attributes.at else '—' }} |
+              {% endfor %}
+              {% else %}
+              No zones yet: paint one on the card above, or press **Learn zones**.
+              {% endif %}
+
+      - type: grid
+        cards:
+          - type: heading
+            heading: Installation
+          - type: tile
+            entity: select.aqara_spatial_multi_sensor_fp400_radar_install_mode
+            name: Install mode
+            features:
+              - type: select-options
+          - type: tile
+            entity: select.aqara_spatial_multi_sensor_fp400_radar_side_install_position
+            name: Side install position
+            features:
+              - type: select-options
+          - type: tile
+            entity: number.aqara_spatial_multi_sensor_fp400_radar_install_height
+            name: Install height
+            features:
+              - type: numeric-input
+                style: buttons
+          - type: tile
+            entity: select.aqara_spatial_multi_sensor_fp400_radar_detection_direction
+            name: Detection direction
+            features:
+              - type: select-options
+          - type: tile
+            entity: select.aqara_spatial_multi_sensor_fp400_radar_proximity_distance_level
+            name: Proximity distance level
+            features:
+              - type: select-options
+          - type: tile
+            entity: select.aqara_spatial_multi_sensor_fp400_radar_coordinate_reverse
+            name: Coordinate reverse
+            features:
+              - type: select-options
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_install_status
+            name: Measured orientation
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_install_angle
+            name: Tilt
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_zones
+            name: Zones
+          - type: tile
+            entity: sensor.aqara_spatial_multi_sensor_fp400_radar_regions
+            name: Regions
+          - type: tile
+            entity: button.aqara_spatial_multi_sensor_fp400_radar_clear_zones
+            name: Clear all zones
+            tap_action:
+              action: none
+            hold_action:
+              action: perform-action
+              perform_action: button.press
+              target:
+                entity_id: button.aqara_spatial_multi_sensor_fp400_radar_clear_zones
+              confirmation:
+                text: Remove every zone from the sensor?
