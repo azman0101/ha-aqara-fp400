@@ -3,6 +3,16 @@
 Releases of the azman0101 fork. Earlier versions are
 [RAR/ha-aqara-fp400](https://github.com/RAR/ha-aqara-fp400) releases.
 
+## 1.3.6
+
+- Position updates are limited to two per second. While someone moves, the device
+  streams about 7 frames per second, and each one rewrote the tracked people sensor
+  (and the target x/y sensors when enabled), adding rows to the Recorder database.
+  Now the first frame is shown at once, later frames within 0.5 s are merged, and the
+  write at the end of the interval always carries the latest frame, so the card stays
+  live and never ends on a stale position. Forgetting a target and clearing an empty
+  room still update immediately.
+
 ## 1.3.5
 
 - The zone card now draws corner-mounted sensors in their corner. It looked for

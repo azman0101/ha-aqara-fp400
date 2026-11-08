@@ -56,6 +56,7 @@ from .const import (
     REGIONS,
     SENSOR_ENDPOINT,
     TARGETS_EXPIRE_S,
+    TARGETS_MIN_INTERVAL_S,
     WATCHED_ATTRIBUTES,
     ZONE_POLL_S,
     cell_from_index,
@@ -218,6 +219,8 @@ class FP400Node:
     _renew_task: asyncio.Task | None = None
     _expire_targets_unsub: Callable[[], None] | None = None
     _learning_unsub: Callable[[], None] | None = None
+    _targets_notify_unsub: Callable[[], None] | None = None
+    _targets_notified_at: float | None = None  # event loop time of the last position write
     _zone_task: asyncio.Task | None = None
     _renew_now: asyncio.Event = field(default_factory=asyncio.Event)
     _was_available: bool = True
@@ -390,6 +393,7 @@ class FP400Node:
             self._renew_task.cancel()
             self._renew_task = None
         self._cancel_target_expiry()
+        self._cancel_targets_notify()
         if self._learning_unsub is not None:
             self._learning_unsub()
             self._learning_unsub = None
@@ -407,14 +411,48 @@ class FP400Node:
 
     @callback
     def _notify(self) -> None:
+        # Not counted against the position throttle: it runs for unrelated reasons (zone polls,
+        # attribute pushes), and a pending throttled write would only repeat current data.
         for listener in (*self._listeners, *self._target_listeners):
             listener()
 
     @callback
     def _notify_targets(self) -> None:
-        """Position updates arrive ~7/s; only wake the entities that show them."""
+        """Wake the position entities, at most every TARGETS_MIN_INTERVAL_S.
+
+        Frames arrive ~7/s while someone moves. A frame inside the interval schedules one
+        write at its end, which publishes whatever frame is latest by then: no position is
+        left unpublished, and a burst still ends on the newest data.
+        """
+        if self._targets_notify_unsub is not None:
+            return  # a write is already scheduled and will carry this frame
+        now = self.hass.loop.time()
+        last = self._targets_notified_at
+        if last is None or now - last >= TARGETS_MIN_INTERVAL_S:
+            self._flush_targets()
+        else:
+            self._targets_notify_unsub = async_call_later(
+                self.hass, TARGETS_MIN_INTERVAL_S - (now - last), self._flush_targets_later
+            )
+
+    @callback
+    def _flush_targets_later(self, _now: datetime) -> None:
+        self._targets_notify_unsub = None
+        self._flush_targets()
+
+    @callback
+    def _flush_targets(self) -> None:
+        """Write the position entities now."""
+        self._cancel_targets_notify()
+        self._targets_notified_at = self.hass.loop.time()
         for listener in self._target_listeners:
             listener()
+
+    @callback
+    def _cancel_targets_notify(self) -> None:
+        if self._targets_notify_unsub is not None:
+            self._targets_notify_unsub()
+            self._targets_notify_unsub = None
 
     @callback
     def _clear_targets(self) -> None:
@@ -812,7 +850,7 @@ class FP400Node:
         if any(t.target_id == target_id for t in self.targets):
             self.targets = [t for t in self.targets if t.target_id != target_id]
             self.targets_updated = dt_util.utcnow()
-            self._notify_targets()
+            self._flush_targets()  # a user action: show it at once, not at the next slot
 
     async def async_subscribe_location(self, timeout: int = LOCATION_SUBSCRIPTION_S) -> None:
         """Ask the device to stream LocationInfo events for `timeout` seconds."""

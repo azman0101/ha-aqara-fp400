@@ -74,7 +74,7 @@ your entities, zone names and history.
 | `sensor.<name>_radar_install_status` / `_install_angle` | orientation from the tilt sensor (diagnostic) |
 | `select.<name>_radar_install_mode` / `_side_install_position` / `_coordinate_reverse` / `_detection_direction` / `_proximity_distance_level` | install and detection settings |
 | `number.<name>_radar_install_height` | mounting height in mm (limits from the device) |
-| `switch.<name>_radar_live_tracking` | keeps the position stream alive (~7 updates/s while someone moves) |
+| `switch.<name>_radar_live_tracking` | keeps the position stream alive (~7 frames/s while someone moves; the position entities are updated at most twice a second, always ending on the latest frame) |
 | `button.<name>_radar_start_background_learning` | starts the AI space background learning |
 | `button.<name>_radar_clear_zones` | removes all zones |
 
