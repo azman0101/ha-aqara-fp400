@@ -141,6 +141,11 @@ sensor_at: top             # optional; top (like the Aqara app) or bottom
 mount: wall                # optional; wall, left_corner or right_corner — defaults to the device's side-install setting
 ```
 
+A complete example dashboard, with the card, presence tiles, a 24-hour history, motion per zone and the installation
+settings, is in [docs/dashboard.yaml](docs/dashboard.yaml). Paste it into a new dashboard's raw configuration editor;
+if your device is not named "Aqara Spatial Multi-Sensor FP400", replace `aqara_spatial_multi_sensor_fp400` with your
+prefix.
+
 Corner mounts use the same cell grid; the card draws the sensor in that corner (verified on a left-corner unit, where
 the cell next to the sensor is row 0, column 0; right-corner mirrors it, untested). Set the mounting in the Aqara app
 or with `select.<name>_radar_side_install`.
